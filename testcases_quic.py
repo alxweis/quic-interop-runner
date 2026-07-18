@@ -1,4 +1,5 @@
 import logging
+import os
 import tempfile
 from datetime import timedelta
 from enum import IntEnum
@@ -1452,6 +1453,34 @@ class MeasurementECHHandshakeDuration(MeasurementHandshakeDuration):
             self._ech_material_ready = True
 
         return directory
+
+    def check(self) -> TestResult:
+        result = super().check()
+        if result != TestResult.SUCCEEDED:
+            return result
+
+        marker = os.path.join(
+            os.path.dirname(self._client_keylog_file),
+            "ech-accepted.txt",
+        )
+
+        if not os.path.isfile(marker):
+            logging.info("ECH acceptance marker is missing: %s", marker)
+            return TestResult.FAILED
+
+        try:
+            with open(marker, "r", encoding="utf-8") as file:
+                accepted = file.read().strip()
+        except OSError as exception:
+            logging.info("Could not read ECH acceptance marker: %s", exception)
+            return TestResult.FAILED
+
+        if accepted != "true":
+            logging.info("ECH was not accepted. Marker contained: %r", accepted)
+            return TestResult.FAILED
+
+        logging.debug("ECH acceptance was confirmed by the client.")
+        return TestResult.SUCCEEDED
 
 
 class MeasurementGoodput(Measurement):
