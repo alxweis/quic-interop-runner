@@ -1324,6 +1324,103 @@ class TestCaseV2(TestCaseQuic):
         return set([hex(int(p.version, 0)) for p in packets])
 
 
+class MeasurementHandshakeDuration(Measurement):
+    FILESIZE = 1 * KB
+    _result = 0.0
+
+    @staticmethod
+    def name():
+        return "handshake-duration"
+
+    @staticmethod
+    def unit() -> str:
+        return "ms"
+
+    @staticmethod
+    def testname(p: Perspective):
+        # Existing endpoint images already understand this testcase.
+        return "handshake"
+
+    @staticmethod
+    def abbreviation():
+        return "HD"
+
+    @staticmethod
+    def desc():
+        return (
+            "Measures the time between the first client Initial packet "
+            "and the first client 1-RTT packet."
+        )
+
+    @staticmethod
+    def repetitions() -> int:
+        return 5
+
+    def get_paths(self):
+        return [self.urlprefix() + path for path in self.get_paths_raw()]
+
+    def get_paths_raw(self):
+        self._files = [self._generate_random_file(self.FILESIZE)]
+        return self._files
+
+    def check(self) -> TestResult:
+        super().check()
+
+        if not self._check_version_and_files():
+            return TestResult.FAILED
+
+        if self._retry_sent():
+            logging.info("Didn't expect a Retry during handshake measurement.")
+            return TestResult.FAILED
+
+        num_handshakes = self._count_handshakes()
+        if num_handshakes != 1:
+            logging.info(
+                "Expected exactly 1 handshake. Got: %d",
+                num_handshakes,
+            )
+            return TestResult.FAILED
+
+        trace = self._client_trace()
+
+        initial_times = trace.get_initial_sniff_times(
+            Direction.FROM_CLIENT
+        )
+        if not initial_times:
+            logging.info("Couldn't find a client Initial packet.")
+            return TestResult.FAILED
+
+        _, first_1rtt, _ = trace.get_1rtt_sniff_times(
+            Direction.FROM_CLIENT
+        )
+        if first_1rtt == 0:
+            logging.info("Couldn't find a client 1-RTT packet.")
+            return TestResult.FAILED
+
+        first_initial = min(initial_times)
+        duration = (
+                           first_1rtt - first_initial
+                   ) / timedelta(milliseconds=1)
+
+        if duration <= 0:
+            logging.info(
+                "Invalid handshake duration: %.3f ms",
+                duration,
+            )
+            return TestResult.FAILED
+
+        self._result = duration
+
+        logging.info(
+            "Handshake duration: %.3f ms",
+            duration,
+        )
+        return TestResult.SUCCEEDED
+
+    def result(self) -> float:
+        return self._result
+
+
 class MeasurementGoodput(Measurement):
     FILESIZE = 10 * MB
     _result = 0.0
@@ -1443,6 +1540,7 @@ TESTCASES_QUIC = [
 ]
 
 MEASUREMENTS = [
+    MeasurementHandshakeDuration,
     MeasurementGoodput,
     MeasurementCrossTraffic,
 ]

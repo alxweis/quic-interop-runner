@@ -205,3 +205,34 @@ class TraceAnalyzer:
     def get_0rtt(self) -> List:
         """Get all 0-RTT packets."""
         return self._get_long_header_packets(PacketType.ZERORTT, Direction.FROM_CLIENT)
+
+    def get_initial_sniff_times(
+            self, direction: Direction = Direction.ALL
+    ) -> List[datetime.datetime]:
+        """Return capture timestamps of QUIC Initial packets."""
+        sniff_times = []
+
+        for packet in self._get_packets(
+                self._get_direction_filter(direction)
+                + "(quic.long.packet_type || quic.long.packet_type_v2)"
+        ):
+            for layer in packet.layers:
+                if layer.layer_name != "quic":
+                    continue
+
+                is_v1_initial = (
+                        hasattr(layer, "long_packet_type")
+                        and layer.long_packet_type
+                        == WIRESHARK_PACKET_TYPES[PacketType.INITIAL]
+                )
+                is_v2_initial = (
+                        hasattr(layer, "long_packet_type_v2")
+                        and layer.long_packet_type_v2
+                        == WIRESHARK_PACKET_TYPES_V2[PacketType.INITIAL]
+                )
+
+                if is_v1_initial or is_v2_initial:
+                    sniff_times.append(packet.sniff_time)
+                    break
+
+        return sniff_times
