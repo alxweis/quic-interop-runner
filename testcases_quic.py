@@ -4,6 +4,7 @@ from datetime import timedelta
 from enum import IntEnum
 import random
 import string
+from ech import generate_ech_material
 from trace import (
     QUIC_V2,
     Direction,
@@ -1421,6 +1422,38 @@ class MeasurementHandshakeDuration(Measurement):
         return self._result
 
 
+class MeasurementECHHandshakeDuration(MeasurementHandshakeDuration):
+    _ech_material_ready = False
+
+    @staticmethod
+    def name():
+        return "ech-handshake-duration"
+
+    @staticmethod
+    def testname(p: Perspective):
+        return "ech-handshake"
+
+    @staticmethod
+    def abbreviation():
+        return "EHD"
+
+    @staticmethod
+    def desc():
+        return (
+            "Measures the time between the first client Initial packet "
+            "and the first client 1-RTT packet with ECH required."
+        )
+
+    def certs_dir(self):
+        directory = super().certs_dir()
+
+        if not self._ech_material_ready:
+            generate_ech_material(directory)
+            self._ech_material_ready = True
+
+        return directory
+
+
 class MeasurementGoodput(Measurement):
     FILESIZE = 10 * MB
     _result = 0.0
@@ -1541,6 +1574,7 @@ TESTCASES_QUIC = [
 
 MEASUREMENTS = [
     MeasurementHandshakeDuration,
+    MeasurementECHHandshakeDuration,
     MeasurementGoodput,
     MeasurementCrossTraffic,
 ]
